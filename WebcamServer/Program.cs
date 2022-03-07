@@ -10,11 +10,11 @@ namespace WebcamServer
         private static long _lastFrameTimestamp = 0;
         //private static VideoCapture capture = new VideoCapture(2);
 
-        public static void Main()
+        public static async Task Main()
         {
-            var server = new SystemServer();
-            server.FrameReceived += Server_FrameReceived;
-            server.Start();
+            var client = new SystemClient("127.0.0.1", 10356, "moon", Connect.ConnectTypes.User);
+            client.FrameReceived += Client_FrameReceived;
+            await client.Start();
 
             /*if (!capture.IsOpened())
                 return;
@@ -33,7 +33,7 @@ namespace WebcamServer
             }
         }
 
-        private static Task Server_FrameReceived(Frame frame)
+        private static Task Client_FrameReceived(Frame frame)
         {
             /*var currentImage = new Mat();
             capture.Read(currentImage);

@@ -8,8 +8,8 @@ namespace WebcamServer
     {
         public static async Task Main()
         {
-            var client = new SystemClient("127.0.0.1", 10356, "moon", Connect.ConnectTypes.User);
-            await client.Start();
+            var server = new SystemServer();
+            server.Start();
 
             using var capture = new VideoCapture(2);
             if (!capture.IsOpened())
@@ -43,7 +43,7 @@ namespace WebcamServer
                     Frame = frame
                 };
 
-                await client.Send(packet);
+                await server.BroadcastToAllClients(packet);
             }
         }
     }
