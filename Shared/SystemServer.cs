@@ -14,6 +14,8 @@ namespace Shared
         public event Func<User, Task> UserDisconnected;
         public event Func<User, Task> UserInfoUpdated;
 
+        public event Func<Frame, Task> FrameReceived;
+
         public event Func<Acknowledgement, Guid, Task> AckReceived;
 
         //Tournament State can be modified by ANY client thread, so definitely needs thread-safe accessing
@@ -64,8 +66,9 @@ namespace Shared
                 Name = "HOST"
             };
 
-            server = new Server(port, System.Net.Sockets.ProtocolType.Tcp);
+            server = new Server(port, port + 1);
             server.PacketReceived += Server_PacketReceived;
+            server.UDPPacketReceived += Server_UDPPacketReceived;
             server.ClientConnected += Server_ClientConnected;
             server.ClientDisconnected += Server_ClientDisconnected;
 
@@ -223,6 +226,14 @@ namespace Shared
         }
         #endregion EventManagement
 
+        private async Task Server_UDPPacketReceived(IPEndPoint endpoint, PacketWrapper packet)
+        {
+            if (packet.Payload.packetCase == Packet.packetOneofCase.Frame)
+            {
+                if (FrameReceived != null) await FrameReceived(packet.Payload.Frame);
+            }
+        }
+
         private async Task Server_PacketReceived(ConnectedUser user, PacketWrapper packet)
         {
             Logger.Debug($"Received data: {LogPacket(packet.Payload)}");
@@ -240,6 +251,11 @@ namespace Shared
             {
                 Acknowledgement acknowledgement = packet.Payload.Acknowledgement;
                 AckReceived?.Invoke(acknowledgement, Guid.Parse(packet.Payload.From));
+            }
+            else if (packet.Payload.packetCase == Packet.packetOneofCase.Frame)
+            {
+                var frame = packet.Payload.Frame;
+                if (FrameReceived != null) await FrameReceived(frame);
             }
             else if (packet.Payload.packetCase == Packet.packetOneofCase.Connect)
             {

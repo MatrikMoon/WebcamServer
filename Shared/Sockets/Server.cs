@@ -19,7 +19,7 @@ namespace Shared.Sockets
         private int port;
         private int udpPort;
 
-        //Blocks while accepting new connections (forever, or until shutdown)
+        //Blocks while starting listeners, then returns
         public Task Start()
         {
             var ipv4Address = IPAddress.Any;
@@ -85,7 +85,7 @@ namespace Shared.Sockets
 
             Task.Run(ipv4Accept);
             Task.Run(ipv6Accept);
-            Task.Run(UdpReceiveLoop);
+            UdpReceiveLoop();
             return Task.CompletedTask;
         }
 
@@ -95,7 +95,7 @@ namespace Shared.Sockets
             this.udpPort = udpPort;
         }
 
-        private async Task UdpReceiveLoop()
+        private async void UdpReceiveLoop()
         {
             while (true)
             {
@@ -296,6 +296,23 @@ namespace Shared.Sockets
 
             await Send(clientId, requestPacket);
         }
+
+        //I'm commenting this out as I want to discourage doing so much heavy action inside a method which
+        //will probably be called in *very* rapid succession. I would encourage the alternative of finding the IPEndPoint
+        //of what you want to send to yourself, and keeping that to reuse for successive calls
+        /*public async Task SendUDP(PacketWrapper packet, string address, int port)
+        {
+            if (!IPAddress.TryParse(address, out var ipAddress))
+            {
+                //If we want to default to ipv4, we should uncomment the following line. I'm leaving it
+                //as it is now so we can test ipv6/ipv4 mix stability
+                //IPAddress ipAddress = ipHostInfo.AddressList.FirstOrDefault(x => x.AddressFamily == AddressFamily.InterNetwork);
+                IPHostEntry ipHostInfo = Dns.GetHostEntry(address);
+                ipAddress = ipHostInfo.AddressList[0];
+            }
+
+            await SendUDP(packet, new IPEndPoint(ipAddress, port));
+        }*/
 
         public async Task SendUDP(PacketWrapper packet, IPEndPoint endpoint) => await SendUDP(packet.ToBytes(), endpoint);
 

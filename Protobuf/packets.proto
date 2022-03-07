@@ -36,6 +36,10 @@ message Connect {
   int32 client_version = 5;
 }
 
+message UDPHello {
+  string user_id = 1;
+}
+
 message Response {
   enum ResponseType {
     Fail = 0;
@@ -56,7 +60,7 @@ message ConnectResponse {
 message Frame {
   string file_id = 1;
   bool compressed = 2;
-  int32 timestamp = 3;
+  int64 timestamp = 3;
   bytes data = 4;
 }
 

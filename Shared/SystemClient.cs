@@ -93,8 +93,9 @@ namespace Shared
             {
                 State = new State();
 
-                Client = new Client(endpoint, port, System.Net.Sockets.ProtocolType.Tcp);
+                Client = new Client(endpoint, port, port + 1);
                 Client.PacketReceived += Client_PacketWrapperReceived;
+                Client.UDPPacketReceived += Client_UDPPacketReceived;
                 Client.ServerConnected += Client_ServerConnected;
                 Client.ServerFailedToConnect += Client_ServerFailedToConnect;
                 Client.ServerDisconnected += Client_ServerDisconnected;
@@ -106,6 +107,11 @@ namespace Shared
                 Logger.Debug("Failed to connect to server. Retrying...");
                 Logger.Debug(e.ToString());
             }
+        }
+
+        private Task Client_UDPPacketReceived(PacketWrapper arg)
+        {
+            throw new NotImplementedException();
         }
 
         private async Task Client_ServerConnected()
@@ -182,6 +188,13 @@ namespace Shared
             {
                 ForwardingPacket = forwardingPacket
             });
+        }
+
+        public Task SendUDP(Packet packet)
+        {
+            Logger.Debug($"Sending data: {LogPacket(packet)}");
+            packet.From = Self?.Id ?? Guid.Empty.ToString();
+            return Client.SendUDP(new PacketWrapper(packet));
         }
 
         static string LogPacket(Packet packet)

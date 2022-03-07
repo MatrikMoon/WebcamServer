@@ -6,14 +6,16 @@ namespace Shared.Sockets
     public class Client
     {
         public event Func<PacketWrapper, Task> PacketReceived;
+        public event Func<PacketWrapper, Task> UDPPacketReceived;
         public event Func<Task> ServerConnected;
         public event Func<Task> ServerFailedToConnect;
         public event Func<Task> ServerDisconnected;
 
-        private int port;
-        private string endpoint;
-        private ProtocolType type;
+        private int serverPort;
+        private string serverAddress;
+        private int udpServerPort;
         private ConnectedUser player = new ConnectedUser();
+        private UdpClient udpClient = new UdpClient();
 
         public bool Connected
         {
@@ -23,32 +25,33 @@ namespace Shared.Sockets
             }
         }
 
-        public Client(string endpoint, int port, ProtocolType type = ProtocolType.Tcp)
+        public Client(string endpoint, int port, int udpPort)
         {
-            this.endpoint = endpoint;
-            this.port = port;
-            this.type = type;
+            serverAddress = endpoint;
+            serverPort = port;
+            udpServerPort = udpPort;
         }
 
         public async Task Start()
         {
-            if (!IPAddress.TryParse(endpoint, out var ipAddress))
+            if (!IPAddress.TryParse(serverAddress, out var ipAddress))
             {
                 //If we want to default to ipv4, we should uncomment the following line. I'm leaving it
                 //as it is now so we can test ipv6/ipv4 mix stability
                 //IPAddress ipAddress = ipHostInfo.AddressList.FirstOrDefault(x => x.AddressFamily == AddressFamily.InterNetwork);
-                IPHostEntry ipHostInfo = Dns.GetHostEntry(endpoint);
+                IPHostEntry ipHostInfo = Dns.GetHostEntry(serverAddress);
                 ipAddress = ipHostInfo.AddressList[0];
             }
 
-            IPEndPoint remoteEP = new IPEndPoint(ipAddress, port);
+            IPEndPoint remoteEndpoint = new IPEndPoint(ipAddress, serverPort);
+            IPEndPoint remoteUDPEndpoint = new IPEndPoint(ipAddress, udpServerPort);
 
-            player.socket = new Socket(ipAddress.AddressFamily, SocketType.Stream, type);
+            player.socket = new Socket(ipAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
 
             try
             {
                 //Try to connect to the server
-                await player.socket.ConnectAsync(remoteEP);
+                await player.socket.ConnectAsync(remoteEndpoint);
                 var client = player.socket;
 
                 //Try to authenticate with SSL
@@ -56,6 +59,9 @@ namespace Shared.Sockets
 
                 //Signal Connection complete
                 if (ServerConnected != null) await ServerConnected.Invoke();
+
+                //Initiate UDP connection
+                udpClient.Connect(remoteUDPEndpoint);
             }
             catch (Exception e)
             {
@@ -65,6 +71,7 @@ namespace Shared.Sockets
             }
 
             ReceiveLoop();
+            UDPReceiveLoop();
         }
 
         private async void ReceiveLoop()
@@ -126,6 +133,32 @@ namespace Shared.Sockets
             }
         }
 
+        public async void UDPReceiveLoop()
+        {
+            while (true)
+            {
+                var result = await udpClient.ReceiveAsync();
+                Logger.Debug($"UDP RECIEVE: {result.Buffer}");
+                if (result.Buffer.Length > 0)
+                {
+                    //If we're not at the start of a packet, increment our position until we are, or we run out of bytes
+                    if (PacketWrapper.PotentiallyValidPacket(result.Buffer))
+                    {
+                        try
+                        {
+                            var readPacket = PacketWrapper.FromBytes(result.Buffer);
+                            if (UDPPacketReceived != null) await UDPPacketReceived.Invoke(readPacket);
+                        }
+                        catch (Exception e)
+                        {
+                            Logger.Error(e.Message);
+                            Logger.Error(e.StackTrace!);
+                        }
+                    }
+                }
+            }
+        }
+
         public async Task Send(PacketWrapper packet)
         {
             var data = packet.ToBytes();
@@ -139,6 +172,12 @@ namespace Shared.Sockets
 
                 throw; //Ancestor functions will handle this and likely reset the connection
             }
+        }
+
+        public async Task SendUDP(PacketWrapper packet)
+        {
+            var data = packet.ToBytes();
+            await udpClient.SendAsync(data);
         }
 
         /// <summary>
